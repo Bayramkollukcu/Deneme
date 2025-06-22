@@ -21,21 +21,13 @@ trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, val
 df_kategori["Trend"] = df_kategori["Trend_Skoru"] >= trend_esik
 trend_urunler = df_kategori[df_kategori["Trend"]]
 
-# Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama üret
+# Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama + sosyal medya önerisi
 @st.cache_data
 def performans_ozeti(row):
     urun_adi = row["Urun_Adi"]
     mesaj = "⚡ Bu ürün, yüksek etkileşim ve güçlü dönüşüm oranıyla öne çıkıyor. Trend dalgasını yakaladı."
-
     post = f"✨ Yeni trend alarmı! {urun_adi} bu hafta satış ve ilgide zirveye oynuyor. Sen de kaçırma! 🔥 #trendürün #stil #yenisezon"
-
-    return mesaj + "
-
-**📣 Sosyal Medya Önerisi:**
-" + post + platformlar
-
-**📣 Sosyal Medya Önerisi:**
-" + post + platformlar
+    return mesaj + "\n\n**📣 Sosyal Medya Önerisi:**\n" + post
 
 # Ürünleri göster
 st.subheader("🔥 Trend Ürünler")
