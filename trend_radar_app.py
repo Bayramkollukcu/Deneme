@@ -21,43 +21,21 @@ trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, val
 df_kategori["Trend"] = df_kategori["Trend_Skoru"] >= trend_esik
 trend_urunler = df_kategori[df_kategori["Trend"]]
 
-# Fonksiyon: Ürün performansını özetleyen yapay zeka metni üret
+# Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama üret
 @st.cache_data
 def performans_ozeti(row):
-    yorum = []
+    urun_adi = row["Urun_Adi"]
+    mesaj = "⚡ Bu ürün, yüksek etkileşim ve güçlü dönüşüm oranıyla öne çıkıyor. Trend dalgasını yakaladı."
 
-    ctr = row["CTR"]
-    cr = row["CR"]
-    strr = row["STR"]
-    trend_skor = row["Trend_Skoru"]
-    kategori_ort = df_kategori["Trend_Skoru"].mean()
+    post = f"✨ Yeni trend alarmı! {urun_adi} bu hafta satış ve ilgide zirveye oynuyor. Sen de kaçırma! 🔥 #trendürün #stil #yenisezon"
 
-    if ctr > 0.9:
-        yorum.append("çok yüksek tıklanma oranı (CTR)")
-    elif ctr > 0.7:
-        yorum.append("yüksek tıklanma oranı")
-    elif ctr < 0.3:
-        yorum.append("düşük kullanıcı ilgisi")
+    return mesaj + "
 
-    if cr > 0.07:
-        yorum.append("etkili satış dönüşüm oranı (CR)")
-    elif cr < 0.03:
-        yorum.append("düşük dönüşüm oranı")
+**📣 Sosyal Medya Önerisi:**
+" + post + platformlar
 
-    if strr > 0.6:
-        yorum.append("stoklara göre güçlü satış hızı")
-    elif strr < 0.2:
-        yorum.append("stok dönüşüm zayıf")
-
-    yorum_metni = ", ".join(yorum)
-    analiz = f"Ürün, {yorum_metni}. Trend skoru: {trend_skor:.2f}."
-
-    if trend_skor > kategori_ort:
-        analiz += " Bu skor, kategori ortalamasının üzerinde olup ürünün trend olma potansiyelini gösteriyor."
-    else:
-        analiz += " Ancak skor, kategori ortalamasının altında. Daha fazla desteklenmesi gerekebilir."
-
-    return analiz
+**📣 Sosyal Medya Önerisi:**
+" + post + platformlar
 
 # Ürünleri göster
 st.subheader("🔥 Trend Ürünler")
@@ -71,7 +49,7 @@ for _, row in trend_urunler.iterrows():
             st.caption(f"{row['Aciklama']}")
             st.write(f"Trend Skoru: `{row['Trend_Skoru']:.2f}`")
             with st.expander("🧠 Yapay Zeka Yorumu"):
-                st.info(performans_ozeti(row))
+                st.markdown(performans_ozeti(row))
 
 # Grafik
 st.subheader("📊 Trend Skoru Grafiği")
