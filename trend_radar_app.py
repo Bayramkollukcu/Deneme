@@ -25,19 +25,39 @@ trend_urunler = df_kategori[df_kategori["Trend"]]
 @st.cache_data
 def performans_ozeti(row):
     yorum = []
-    if row["CTR"] > 0.9:
-        yorum.append("yüksek tıklanma oranı")
-    if row["CR"] > 0.05:
-        yorum.append("iyi dönüşüm oranı")
-    if row["STR"] > 0.5:
-        yorum.append("stok dönüşüm başarısı")
-    if row["Trend_Skoru"] > df_kategori["Trend_Skoru"].mean():
-        yorum.append("kategori ortalamasının üzerinde performans")
 
-    if yorum:
-        return f"Bu ürün, {', '.join(yorum)} ile öne çıkıyor. Kampanya veya push bildirim desteğiyle daha fazla satış potansiyeline sahip."
+    ctr = row["CTR"]
+    cr = row["CR"]
+    strr = row["STR"]
+    trend_skor = row["Trend_Skoru"]
+    kategori_ort = df_kategori["Trend_Skoru"].mean()
+
+    if ctr > 0.9:
+        yorum.append("çok yüksek tıklanma oranı (CTR)")
+    elif ctr > 0.7:
+        yorum.append("yüksek tıklanma oranı")
+    elif ctr < 0.3:
+        yorum.append("düşük kullanıcı ilgisi")
+
+    if cr > 0.07:
+        yorum.append("etkili satış dönüşüm oranı (CR)")
+    elif cr < 0.03:
+        yorum.append("düşük dönüşüm oranı")
+
+    if strr > 0.6:
+        yorum.append("stoklara göre güçlü satış hızı")
+    elif strr < 0.2:
+        yorum.append("stok dönüşüm zayıf")
+
+    yorum_metni = ", ".join(yorum)
+    analiz = f"Ürün, {yorum_metni}. Trend skoru: {trend_skor:.2f}."
+
+    if trend_skor > kategori_ort:
+        analiz += " Bu skor, kategori ortalamasının üzerinde olup ürünün trend olma potansiyelini gösteriyor."
     else:
-        return "Ürün performansı ortalama seviyede. Kategori içinde desteklenirse öne çıkabilir."
+        analiz += " Ancak skor, kategori ortalamasının altında. Daha fazla desteklenmesi gerekebilir."
+
+    return analiz
 
 # Ürünleri göster
 st.subheader("🔥 Trend Ürünler")
@@ -69,4 +89,3 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
 st.altair_chart(grafik, use_container_width=True)
 
 st.info("Bu prototipte sahte veriler kullanılmaktadır. Gerçek veri ile entegre edilebilir.")
-
