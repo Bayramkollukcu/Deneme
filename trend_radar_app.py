@@ -69,3 +69,4 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
 st.altair_chart(grafik, use_container_width=True)
 
 st.info("Bu prototipte sahte veriler kullanılmaktadır. Gerçek veri ile entegre edilebilir.")
+
