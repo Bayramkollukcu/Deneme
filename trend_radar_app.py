@@ -56,26 +56,40 @@ df = pd.DataFrame(urunler)
 # Cover Rate hesapla (Stok / Satış)
 df["Cover_Rate"] = df["Stok_Adedi"] / df["Satis_Adedi"].replace(0, np.nan)
 
-# Z-skor hesaplamaları (global bazda)
-cover_z = (df["Cover_Rate"] - df["Cover_Rate"].mean()) / df["Cover_Rate"].std()
-ctr_z = (df["CTR"] - df["CTR"].mean()) / df["CTR"].std()
-cr_z = (df["CR"] - df["CR"].mean()) / df["CR"].std()
-str_z = (df["STR"] - df["STR"].mean()) / df["STR"].std()
-
-# Trend Skoru hesapla (eşit ağırlıklı ortalama, Cover ters işaretli)
-df["Trend_Skoru"] = (ctr_z + cr_z + str_z - cover_z) / 4
-
-# Trend skoru eşiği
-trend_esik = st.slider("📈 Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, value=0.5, step=0.1)
-
-# Her kategoriden trend eşiğini geçen en iyi 2 ürünü seç
-trend_liste = []
+# Kategori içi Z-skor hesaplamaları
+z_skorlar = []
 for kategori in df["Kategori"].unique():
-    alt_kume = df[(df["Kategori"] == kategori) & (df["Trend_Skoru"] >= trend_esik)]
-    en_iyiler = alt_kume.sort_values(by="Trend_Skoru", ascending=False).head(2)
-    trend_liste.append(en_iyiler)
+    sub_df = df[df["Kategori"] == kategori].copy()
+    sub_df["Z_CTR"] = (sub_df["CTR"] - sub_df["CTR"].mean()) / sub_df["CTR"].std()
+    sub_df["Z_CR"] = (sub_df["CR"] - sub_df["CR"].mean()) / sub_df["CR"].std()
+    sub_df["Z_STR"] = (sub_df["STR"] - sub_df["STR"].mean()) / sub_df["STR"].std()
+    sub_df["Z_Cover"] = (sub_df["Cover_Rate"] - sub_df["Cover_Rate"].mean()) / sub_df["Cover_Rate"].std()
+    sub_df["Trend_Skoru"] = (sub_df["Z_CTR"] + sub_df["Z_CR"] + sub_df["Z_STR"] - sub_df["Z_Cover"]) / 4
+    z_skorlar.append(sub_df)
 
-trend_urunler = pd.concat(trend_liste)
+# Birleştir
+scored_df = pd.concat(z_skorlar)
+
+# Global eşik belirle
+global_mean = scored_df["Trend_Skoru"].mean()
+global_std = scored_df["Trend_Skoru"].std()
+
+st.subheader("📈 Global Trend Skoru Dağılımı")
+trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, value=float(round(global_mean + global_std * 0.5, 2)), step=0.1)
+
+hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#66fcf1").encode(
+    alt.X("Trend_Skoru", bin=alt.Bin(maxbins=30)),
+    y='count()',
+).properties(width=800, height=300)
+
+line = alt.Chart(pd.DataFrame({"Trend_Esik": [trend_esik]})).mark_rule(color="red").encode(
+    x="Trend_Esik"
+)
+
+st.altair_chart(hist + line, use_container_width=True)
+
+# Eşiği geçen ürünler
+trend_urunler = scored_df[scored_df["Trend_Skoru"] >= trend_esik]
 
 # Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama üret
 @st.cache_data
@@ -101,8 +115,8 @@ for _, row in trend_urunler.iterrows():
 
 # Grafik
 st.subheader("📊 Trend Skoru Grafiği")
-kategori_secimi = st.selectbox("📂 Kategori Seçin:", options=df["Kategori"].unique())
-df_kategori = df[df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
+kategori_secimi = st.selectbox("📂 Kategori Seçin:", options=scored_df["Kategori"].unique())
+df_kategori = scored_df[scored_df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
 
 grafik = alt.Chart(df_kategori).mark_bar().encode(
     x=alt.X("Urun_Adi", sort="-y"),
