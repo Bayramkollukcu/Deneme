@@ -46,13 +46,8 @@ for kategori in df["Kategori"].unique():
 # Birleştir
 scored_df = pd.concat(z_skorlar)
 
-# Global eşik belirle (daha yüksek eşik: ortalama + 1 std sapma)
-global_mean = scored_df["Trend_Skoru"].mean()
-global_std = scored_df["Trend_Skoru"].std()
-def_esik = round(global_mean + global_std * 1.0, 2)
-
 st.subheader("📈 Global Trend Skoru Dağılımı")
-trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=3.0, value=float(def_esik), step=0.1)
+trend_esik = 1.0  # Kategori içi Z-skor ortalamasına göre eşik
 
 hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#0a74da").encode(
     alt.X("Trend_Skoru", bin=alt.Bin(maxbins=30)),
