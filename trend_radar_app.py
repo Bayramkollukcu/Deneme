@@ -3,6 +3,33 @@ import pandas as pd
 import numpy as np
 import altair as alt
 
+# Sayfa ayarları
+st.set_page_config(page_title="Trend Radar", page_icon="🌐", layout="wide")
+
+st.markdown("""
+    <style>
+    .main {
+        background-color: #0f1116;
+        color: white;
+    }
+    .stApp {
+        font-family: 'Segoe UI', sans-serif;
+    }
+    h1, h2, h3 {
+        color: #66fcf1;
+    }
+    .css-1cpxqw2, .css-ffhzg2 {  /* Başlıklar ve alt başlıklar */
+        color: #45a29e !important;
+    }
+    .css-1v0mbdj { /* Info box */
+        background-color: #1f2833;
+        color: white;
+        border: 1px solid #66fcf1;
+        border-radius: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
 
 # Örnek veri oluştur (Kadın Elbise ve Erkek Tişört kategorileri)
@@ -39,13 +66,13 @@ str_z = (df["STR"] - df["STR"].mean()) / df["STR"].std()
 df["Trend_Skoru"] = (ctr_z + cr_z + str_z - cover_z) / 4
 
 # Kategori seçimi
-kategori_secimi = st.selectbox("Kategori Seçin:", options=df["Kategori"].unique())
+kategori_secimi = st.selectbox("📂 Kategori Seçin:", options=df["Kategori"].unique())
 
 # Kategoriye göre filtrele
 df_kategori = df[df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
 
 # Trend skoru eşiği
-trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, value=0.5, step=0.1)
+trend_esik = st.slider("📈 Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, value=0.5, step=0.1)
 
 # Trend ürünler
 df_kategori["Trend"] = df_kategori["Trend_Skoru"] >= trend_esik
@@ -80,11 +107,11 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
     y="Trend_Skoru",
     color=alt.condition(
         f"datum.Trend_Skoru >= {trend_esik}",
-        alt.value("green"),
-        alt.value("lightgray")
+        alt.value("#66fcf1"),
+        alt.value("#c5c6c7")
     ),
     tooltip=["Urun_Adi", "Trend_Skoru"]
-).properties(width=700)
+).properties(width=800, height=400)
 
 st.altair_chart(grafik, use_container_width=True)
 
