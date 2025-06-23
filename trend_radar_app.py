@@ -5,8 +5,38 @@ import altair as alt
 
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
 
-# Veri yükle
-df = pd.read_csv("trend_urunler.csv")
+# Örnek veri oluştur (Kadın Elbise ve Erkek Tişört kategorileri)
+kategoriler = ["Kadın Elbise", "Erkek Tişört"]
+urunler = []
+
+for kategori in kategoriler:
+    for i in range(1, 11):
+        urun = {
+            "Urun_Adi": f"{kategori.split()[0]} Ürün {i}",
+            "Kategori": kategori,
+            "CTR": round(np.random.uniform(0.5, 5.0), 2),
+            "CR": round(np.random.uniform(0.5, 4.0), 2),
+            "STR": round(np.random.uniform(0.3, 2.0), 2),
+            "Stok_Adedi": np.random.randint(50, 500),
+            "Satis_Adedi": np.random.randint(10, 400),
+            "Aciklama": f"{kategori} kategorisinde öne çıkan bir ürün.",
+            "Gorsel": "https://via.placeholder.com/100"
+        }
+        urunler.append(urun)
+
+df = pd.DataFrame(urunler)
+
+# Cover Rate hesapla (Stok / Satış)
+df["Cover_Rate"] = df["Stok_Adedi"] / df["Satis_Adedi"].replace(0, np.nan)
+
+# Z-skor hesaplamaları
+cover_z = (df["Cover_Rate"] - df["Cover_Rate"].mean()) / df["Cover_Rate"].std()
+ctr_z = (df["CTR"] - df["CTR"].mean()) / df["CTR"].std()
+cr_z = (df["CR"] - df["CR"].mean()) / df["CR"].std()
+str_z = (df["STR"] - df["STR"].mean()) / df["STR"].std()
+
+# Trend Skoru hesapla (eşit ağırlıklı ortalama, Cover ters işaretli)
+df["Trend_Skoru"] = (ctr_z + cr_z + str_z - cover_z) / 4
 
 # Kategori seçimi
 kategori_secimi = st.selectbox("Kategori Seçin:", options=df["Kategori"].unique())
@@ -21,7 +51,7 @@ trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, val
 df_kategori["Trend"] = df_kategori["Trend_Skoru"] >= trend_esik
 trend_urunler = df_kategori[df_kategori["Trend"]]
 
-# Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama + sosyal medya önerisi
+# Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama üret
 @st.cache_data
 def performans_ozeti(row):
     urun_adi = row["Urun_Adi"]
@@ -58,4 +88,4 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
 
 st.altair_chart(grafik, use_container_width=True)
 
-st.info("Bu prototipte sahte veriler kullanılmaktadır. Gerçek veri ile entegre edilebilir.")
+st.info("Bu prototipte örnek veriler kullanılmaktadır. Gerçek veri entegrasyonu yapılabilir.")
