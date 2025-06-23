@@ -6,30 +6,6 @@ import altair as alt
 # Sayfa ayarları
 st.set_page_config(page_title="Trend Radar", page_icon="🌐", layout="wide")
 
-st.markdown("""
-    <style>
-    .main {
-        background-color: #0f1116;
-        color: white;
-    }
-    .stApp {
-        font-family: 'Segoe UI', sans-serif;
-    }
-    h1, h2, h3 {
-        color: #66fcf1;
-    }
-    .css-1cpxqw2, .css-ffhzg2 {
-        color: #45a29e !important;
-    }
-    .css-1v0mbdj {
-        background-color: #1f2833;
-        color: white;
-        border: 1px solid #66fcf1;
-        border-radius: 10px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
 
 # Örnek veri oluştur (Kadın Elbise ve Erkek Tişört kategorileri)
@@ -70,14 +46,15 @@ for kategori in df["Kategori"].unique():
 # Birleştir
 scored_df = pd.concat(z_skorlar)
 
-# Global eşik belirle
+# Global eşik belirle (daha yüksek eşik: ortalama + 1 std sapma)
 global_mean = scored_df["Trend_Skoru"].mean()
 global_std = scored_df["Trend_Skoru"].std()
+def_esik = round(global_mean + global_std * 1.0, 2)
 
 st.subheader("📈 Global Trend Skoru Dağılımı")
-trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, value=float(round(global_mean + global_std * 0.5, 2)), step=0.1)
+trend_esik = st.slider("Trend Skoru Eşiği", min_value=-2.0, max_value=3.0, value=float(def_esik), step=0.1)
 
-hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#66fcf1").encode(
+hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#0a74da").encode(
     alt.X("Trend_Skoru", bin=alt.Bin(maxbins=30)),
     y='count()',
 ).properties(width=800, height=300)
@@ -123,12 +100,17 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
     y="Trend_Skoru",
     color=alt.condition(
         f"datum.Trend_Skoru >= {trend_esik}",
-        alt.value("#66fcf1"),
-        alt.value("#c5c6c7")
+        alt.value("#0a74da"),
+        alt.value("#aab7b8")
     ),
     tooltip=["Urun_Adi", "Trend_Skoru"]
 ).properties(width=800, height=400)
 
-st.altair_chart(grafik, use_container_width=True)
+# Yatay eşik çizgisi
+y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(
+    y="y"
+)
 
-st.info("Bu prototipte örnek veriler kullanılmaktadır. Gerçek veri entegrasyonu yapılabilir.")
+st.altair_chart(grafik + y_line, use_container_width=True)
+
+st.caption("\nℹ️ Bu prototipte örnek veriler kullanılmaktadır. Gerçek veri entegrasyonu yapılabilir.")
