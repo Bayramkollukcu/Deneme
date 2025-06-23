@@ -18,10 +18,10 @@ st.markdown("""
     h1, h2, h3 {
         color: #66fcf1;
     }
-    .css-1cpxqw2, .css-ffhzg2 {  /* Başlıklar ve alt başlıklar */
+    .css-1cpxqw2, .css-ffhzg2 {
         color: #45a29e !important;
     }
-    .css-1v0mbdj { /* Info box */
+    .css-1v0mbdj {
         background-color: #1f2833;
         color: white;
         border: 1px solid #66fcf1;
@@ -56,7 +56,7 @@ df = pd.DataFrame(urunler)
 # Cover Rate hesapla (Stok / Satış)
 df["Cover_Rate"] = df["Stok_Adedi"] / df["Satis_Adedi"].replace(0, np.nan)
 
-# Z-skor hesaplamaları
+# Z-skor hesaplamaları (global bazda)
 cover_z = (df["Cover_Rate"] - df["Cover_Rate"].mean()) / df["Cover_Rate"].std()
 ctr_z = (df["CTR"] - df["CTR"].mean()) / df["CTR"].std()
 cr_z = (df["CR"] - df["CR"].mean()) / df["CR"].std()
@@ -65,18 +65,17 @@ str_z = (df["STR"] - df["STR"].mean()) / df["STR"].std()
 # Trend Skoru hesapla (eşit ağırlıklı ortalama, Cover ters işaretli)
 df["Trend_Skoru"] = (ctr_z + cr_z + str_z - cover_z) / 4
 
-# Kategori seçimi
-kategori_secimi = st.selectbox("📂 Kategori Seçin:", options=df["Kategori"].unique())
-
-# Kategoriye göre filtrele
-df_kategori = df[df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
-
 # Trend skoru eşiği
 trend_esik = st.slider("📈 Trend Skoru Eşiği", min_value=-2.0, max_value=2.0, value=0.5, step=0.1)
 
-# Trend ürünler
-df_kategori["Trend"] = df_kategori["Trend_Skoru"] >= trend_esik
-trend_urunler = df_kategori[df_kategori["Trend"]]
+# Her kategoriden trend eşiğini geçen en iyi 2 ürünü seç
+trend_liste = []
+for kategori in df["Kategori"].unique():
+    alt_kume = df[(df["Kategori"] == kategori) & (df["Trend_Skoru"] >= trend_esik)]
+    en_iyiler = alt_kume.sort_values(by="Trend_Skoru", ascending=False).head(2)
+    trend_liste.append(en_iyiler)
+
+trend_urunler = pd.concat(trend_liste)
 
 # Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama üret
 @st.cache_data
@@ -102,6 +101,9 @@ for _, row in trend_urunler.iterrows():
 
 # Grafik
 st.subheader("📊 Trend Skoru Grafiği")
+kategori_secimi = st.selectbox("📂 Kategori Seçin:", options=df["Kategori"].unique())
+df_kategori = df[df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
+
 grafik = alt.Chart(df_kategori).mark_bar().encode(
     x=alt.X("Urun_Adi", sort="-y"),
     y="Trend_Skoru",
