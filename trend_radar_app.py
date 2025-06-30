@@ -5,8 +5,25 @@ import altair as alt
 
 # Sayfa ayarları
 st.set_page_config(page_title="Trend Radar", page_icon="🌐", layout="wide")
-
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
+
+# Açıklama Kutusu - Metodoloji
+st.markdown("""
+### 📘 Kullanılan Metodoloji
+Trend skoru, her ürünün performansını aşağıdaki dört metrik üzerinden analiz eder:
+- **CTR** (Tıklanma oranı)
+- **CR** (Satın alma dönüşüm oranı)
+- **STR** (Sepete eklenme oranı)
+- **Devir Hızı** (Satış / Stok adedi)
+
+Bu metrikler ürünün ait olduğu kategori içinde **Z-skoru** yöntemiyle standartlaştırılır. Ardından şu formülle skor hesaplanır:
+
+\[
+\text{Trend Skoru} = \frac{Z_{CTR} + Z_{CR} + Z_{STR} + Z_{Devir}}{4}
+\]
+
+Bir ürünün "trend" olarak seçilmesi için skoru belirli bir eşiğin üzerinde olmalıdır (örn. 1.0).
+""")
 
 # Örnek veri oluştur (Kadın Elbise ve Erkek Tişört kategorileri)
 kategoriler = ["Kadın Elbise", "Erkek Tişört"]
@@ -29,8 +46,8 @@ for kategori in kategoriler:
 
 df = pd.DataFrame(urunler)
 
-# Cover Rate hesapla (Stok / Satış)
-df["Cover_Rate"] = df["Stok_Adedi"] / df["Satis_Adedi"].replace(0, np.nan)
+# Devir Hızı hesapla (Satış / Stok)
+df["Devir_Hizi"] = df["Satis_Adedi"] / df["Stok_Adedi"].replace(0, np.nan)
 
 # Kategori içi Z-skor hesaplamaları
 z_skorlar = []
@@ -39,40 +56,49 @@ for kategori in df["Kategori"].unique():
     sub_df["Z_CTR"] = (sub_df["CTR"] - sub_df["CTR"].mean()) / sub_df["CTR"].std()
     sub_df["Z_CR"] = (sub_df["CR"] - sub_df["CR"].mean()) / sub_df["CR"].std()
     sub_df["Z_STR"] = (sub_df["STR"] - sub_df["STR"].mean()) / sub_df["STR"].std()
-    sub_df["Z_Cover"] = (sub_df["Cover_Rate"] - sub_df["Cover_Rate"].mean()) / sub_df["Cover_Rate"].std()
-    sub_df["Trend_Skoru"] = (sub_df["Z_CTR"] + sub_df["Z_CR"] + sub_df["Z_STR"] - sub_df["Z_Cover"]) / 4
+    sub_df["Z_Devir"] = (sub_df["Devir_Hizi"] - sub_df["Devir_Hizi"].mean()) / sub_df["Devir_Hizi"].std()
+    sub_df["Trend_Skoru"] = (sub_df["Z_CTR"] + sub_df["Z_CR"] + sub_df["Z_STR"] + sub_df["Z_Devir"]) / 4
     z_skorlar.append(sub_df)
 
 # Birleştir
 scored_df = pd.concat(z_skorlar)
 
-st.subheader("📈 Global Trend Skoru Dağılımı")
-trend_esik = 1.0  # Kategori içi Z-skor ortalamasına göre eşik
+# Z-skor eşiği için kullanıcı arayüzü
+st.sidebar.markdown("### 🔧 Trend Skor Eşiğini Seç")
+trend_esik = st.sidebar.slider(
+    label="Trend kabul edilmesi için skor eşiği",
+    min_value=0.5,
+    max_value=2.5,
+    step=0.1,
+    value=1.0,
+    help="Z-skoru ≥ 1.0: Ortalama üzeri. 1.28: En iyi %10. 1.64: En iyi %5 ürün."
+)
 
-hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#0a74da").encode(
-    alt.X("Trend_Skoru", bin=alt.Bin(maxbins=30)),
-    y='count()',
+# Skor Dağılımı
+st.markdown("### 📊 Trend Skoru Dağılımı (Tüm Kategoriler)")
+hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#4a90e2").encode(
+    alt.X("Trend_Skoru", bin=alt.Bin(maxbins=30), title="Trend Skoru"),
+    y=alt.Y('count()', title='Ürün Sayısı')
 ).properties(width=800, height=300)
 
 line = alt.Chart(pd.DataFrame({"Trend_Esik": [trend_esik]})).mark_rule(color="red").encode(
     x="Trend_Esik"
 )
-
 st.altair_chart(hist + line, use_container_width=True)
 
-# Eşiği geçen ürünler
+# Trend ürünler (skoru ≥ eşiği)
 trend_urunler = scored_df[scored_df["Trend_Skoru"] >= trend_esik]
 
-# Fonksiyon: Ürün performansını özetleyen kısa ve etkileyici açıklama üret
+# Fonksiyon: Ürün performans açıklaması
 @st.cache_data
 def performans_ozeti(row):
     urun_adi = row["Urun_Adi"]
-    mesaj = "⚡ Bu ürün, yüksek etkileşim ve güçlü dönüşüm oranıyla öne çıkıyor. Trend dalgasını yakaladı."
+    mesaj = "⚡ Bu ürün, yüksek etkileşim, güçlü dönüşüm oranı ve yüksek devir hızıyla öne çıkıyor."
     post = f"✨ Yeni trend alarmı! {urun_adi} bu hafta satış ve ilgide zirveye oynuyor. Sen de kaçırma! 🔥 #trendürün #stil #yenisezon"
     return mesaj + "\n\n**📣 Sosyal Medya Önerisi:**\n" + post
 
-# Ürünleri göster
-st.subheader("🔥 Trend Ürünler")
+# Trend Ürünler
+st.markdown(f"### 🔥 Trend Olarak Seçilen Ürünler (Skor ≥ {trend_esik})")
 for _, row in trend_urunler.iterrows():
     with st.container():
         cols = st.columns([1, 3])
@@ -85,27 +111,25 @@ for _, row in trend_urunler.iterrows():
             with st.expander("🧠 Yapay Zeka Yorumu"):
                 st.markdown(performans_ozeti(row))
 
-# Grafik
-st.subheader("📊 Trend Skoru Grafiği")
-kategori_secimi = st.selectbox("📂 Kategori Seçin:", options=scored_df["Kategori"].unique())
+# Trend Skoru Grafiği (Kategori Bazlı)
+st.markdown("### 📂 Kategori Bazında Trend Skorları")
+kategori_secimi = st.selectbox("Kategori seçin:", options=scored_df["Kategori"].unique())
 df_kategori = scored_df[scored_df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
 
 grafik = alt.Chart(df_kategori).mark_bar().encode(
-    x=alt.X("Urun_Adi", sort="-y"),
-    y="Trend_Skoru",
+    x=alt.X("Urun_Adi", sort="-y", title="Ürün"),
+    y=alt.Y("Trend_Skoru", title="Skor"),
     color=alt.condition(
         f"datum.Trend_Skoru >= {trend_esik}",
-        alt.value("#0a74da"),
-        alt.value("#aab7b8")
+        alt.value("#2ecc71"),  # yeşil
+        alt.value("#bdc3c7")   # gri
     ),
     tooltip=["Urun_Adi", "Trend_Skoru"]
 ).properties(width=800, height=400)
 
 # Yatay eşik çizgisi
-y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(
-    y="y"
-)
+y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
 
 st.altair_chart(grafik + y_line, use_container_width=True)
 
-st.caption("\nℹ️ Bu prototipte örnek veriler kullanılmaktadır. Gerçek veri entegrasyonu yapılabilir.")
+st.caption("ℹ️ Bu prototip örnek verilerle çalışmaktadır. Gerçek veri setleri entegre edilebilir.")
