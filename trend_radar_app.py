@@ -12,18 +12,31 @@ kategoriler = ["Kadın Elbise", "Erkek Tişört"]
 urunler = []
 
 for kategori in kategoriler:
-    for i in range(1, 11):
-        urun = {
-            "Urun_Adi": f"{kategori.split()[0]} Ürün {i}",
-            "Kategori": kategori,
-            "CTR": round(np.random.uniform(0.5, 5.0), 2),
-            "CR": round(np.random.uniform(0.5, 4.0), 2),
-            "STR": round(np.random.uniform(0.3, 2.0), 2),
-            "Stok_Adedi": np.random.randint(50, 500),
-            "Satis_Adedi": np.random.randint(10, 400),
-            "Aciklama": f"{kategori} kategorisinde öne çıkan bir ürün.",
-            "Gorsel": "https://via.placeholder.com/100"
-        }
+    for i in range(10):
+        if i == 0:
+            urun = {
+                "Urun_Adi": f"{kategori.split()[0]} Ürün {i+1}",
+                "Kategori": kategori,
+                "CTR": 4.8,
+                "CR": 3.5,
+                "STR": 1.9,
+                "Stok_Adedi": 100,
+                "Satis_Adedi": 300,
+                "Aciklama": f"{kategori} kategorisinde öne çıkan bir ürün.",
+                "Gorsel": "https://via.placeholder.com/100"
+            }
+        else:
+            urun = {
+                "Urun_Adi": f"{kategori.split()[0]} Ürün {i+1}",
+                "Kategori": kategori,
+                "CTR": round(np.random.uniform(0.5, 3.5), 2),
+                "CR": round(np.random.uniform(0.5, 2.5), 2),
+                "STR": round(np.random.uniform(0.3, 1.5), 2),
+                "Stok_Adedi": np.random.randint(100, 500),
+                "Satis_Adedi": np.random.randint(10, 200),
+                "Aciklama": f"{kategori} kategorisinde dikkat çeken ürünlerden.",
+                "Gorsel": "https://via.placeholder.com/100"
+            }
         urunler.append(urun)
 
 df = pd.DataFrame(urunler)
@@ -67,13 +80,12 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
     y=alt.Y("Trend_Skoru", title="Skor"),
     color=alt.condition(
         f"datum.Trend_Skoru >= {trend_esik}",
-        alt.value("#2ecc71"),  # yeşil
-        alt.value("#bdc3c7")   # gri
+        alt.value("#2ecc71"),
+        alt.value("#bdc3c7")
     ),
     tooltip=["Urun_Adi", "Trend_Skoru"]
 ).properties(width=800, height=400)
 
-# Yatay eşik çizgisi
 y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
 
 st.altair_chart(grafik + y_line, use_container_width=True)
