@@ -56,48 +56,12 @@ trend_esik = st.sidebar.slider(
     help="Z-skoru ≥ 1.0: Ortalama üzeri. 1.28: En iyi %10. 1.64: En iyi %5 ürün."
 )
 
-# Skor Dağılımı
-st.markdown("### 📊 Trend Skoru Dağılımı (Tüm Kategoriler)")
-hist = alt.Chart(scored_df).mark_bar(opacity=0.7, color="#4a90e2").encode(
-    alt.X("Trend_Skoru", bin=alt.Bin(maxbins=30), title="Trend Skoru"),
-    y=alt.Y('count()', title='Ürün Sayısı')
-).properties(width=800, height=300)
-
-line = alt.Chart(pd.DataFrame({"Trend_Esik": [trend_esik]})).mark_rule(color="red").encode(
-    x="Trend_Esik"
-)
-st.altair_chart(hist + line, use_container_width=True)
-
-# Trend ürünler (skoru ≥ eşiği)
-trend_urunler = scored_df[scored_df["Trend_Skoru"] >= trend_esik]
-
-# Fonksiyon: Ürün performans açıklaması
-@st.cache_data
-def performans_ozeti(row):
-    urun_adi = row["Urun_Adi"]
-    mesaj = "⚡ Bu ürün, yüksek etkileşim, güçlü dönüşüm oranı ve yüksek devir hızıyla öne çıkıyor."
-    post = f"✨ Yeni trend alarmı! {urun_adi} bu hafta satış ve ilgide zirveye oynuyor. Sen de kaçırma! 🔥 #trendürün #stil #yenisezon"
-    return mesaj + "\n\n**📣 Sosyal Medya Önerisi:**\n" + post
-
-# Trend Ürünler
-st.markdown(f"### 🔥 Trend Olarak Seçilen Ürünler (Skor ≥ {trend_esik})")
-for _, row in trend_urunler.iterrows():
-    with st.container():
-        cols = st.columns([1, 3])
-        with cols[0]:
-            st.image(row["Gorsel"], width=100)
-        with cols[1]:
-            st.markdown(f"**{row['Urun_Adi']}**")
-            st.caption(f"{row['Aciklama']}")
-            st.write(f"Trend Skoru: `{row['Trend_Skoru']:.2f}`")
-            with st.expander("🧠 Yapay Zeka Yorumu"):
-                st.markdown(performans_ozeti(row))
-
-# Trend Skoru Grafiği (Kategori Bazlı)
+# Kategori seçimi en üste alındı
 st.markdown("### 📂 Kategori Bazında Trend Skorları")
 kategori_secimi = st.selectbox("Kategori seçin:", options=scored_df["Kategori"].unique())
 df_kategori = scored_df[scored_df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
 
+# Trend Skoru Grafiği (Kategori Bazlı)
 grafik = alt.Chart(df_kategori).mark_bar().encode(
     x=alt.X("Urun_Adi", sort="-y", title="Ürün"),
     y=alt.Y("Trend_Skoru", title="Skor"),
@@ -113,5 +77,30 @@ grafik = alt.Chart(df_kategori).mark_bar().encode(
 y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
 
 st.altair_chart(grafik + y_line, use_container_width=True)
+
+# Trend ürünler (skoru ≥ eşiği ve kategoriye göre)
+trend_urunler = df_kategori[df_kategori["Trend_Skoru"] >= trend_esik]
+
+# Fonksiyon: Ürün performans açıklaması
+@st.cache_data
+def performans_ozeti(row):
+    urun_adi = row["Urun_Adi"]
+    mesaj = "⚡ Bu ürün, yüksek etkileşim, güçlü dönüşüm oranı ve yüksek devir hızıyla öne çıkıyor."
+    post = f"✨ Yeni trend alarmı! {urun_adi} bu hafta satış ve ilgide zirveye oynuyor. Sen de kaçırma! 🔥 #trendürün #stil #yenisezon"
+    return mesaj + "\n\n**📣 Sosyal Medya Önerisi:**\n" + post
+
+# Trend Ürünler
+st.markdown(f"### 🔥 {kategori_secimi} Kategorisindeki Trend Ürünler (Skor ≥ {trend_esik})")
+for _, row in trend_urunler.iterrows():
+    with st.container():
+        cols = st.columns([1, 3])
+        with cols[0]:
+            st.image(row["Gorsel"], width=100)
+        with cols[1]:
+            st.markdown(f"**{row['Urun_Adi']}**")
+            st.caption(f"{row['Aciklama']}")
+            st.write(f"Trend Skoru: `{row['Trend_Skoru']:.2f}`")
+            with st.expander("🧠 Yapay Zeka Yorumu"):
+                st.markdown(performans_ozeti(row))
 
 st.caption("ℹ️ Bu prototip örnek verilerle çalışmaktadır. Gerçek veri setleri entegre edilebilir.")
