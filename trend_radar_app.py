@@ -7,24 +7,6 @@ import altair as alt
 st.set_page_config(page_title="Trend Radar", page_icon="🌐", layout="wide")
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
 
-# Açıklama Kutusu - Metodoloji
-st.markdown("""
-### 📘 Kullanılan Metodoloji
-Trend skoru, her ürünün performansını aşağıdaki dört metrik üzerinden analiz eder:
-- **CTR** (Tıklanma oranı)
-- **CR** (Satın alma dönüşüm oranı)
-- **STR** (Sepete eklenme oranı)
-- **Devir Hızı** (Satış / Stok adedi)
-
-Bu metrikler ürünün ait olduğu kategori içinde **Z-skoru** yöntemiyle standartlaştırılır. Ardından şu formülle skor hesaplanır:
-
-\[
-\text{Trend Skoru} = \frac{Z_{CTR} + Z_{CR} + Z_{STR} + Z_{Devir}}{4}
-\]
-
-Bir ürünün "trend" olarak seçilmesi için skoru belirli bir eşiğin üzerinde olmalıdır (örn. 1.0).
-""")
-
 # Örnek veri oluştur (Kadın Elbise ve Erkek Tişört kategorileri)
 kategoriler = ["Kadın Elbise", "Erkek Tişört"]
 urunler = []
