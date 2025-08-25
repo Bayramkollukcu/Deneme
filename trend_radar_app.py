@@ -12,7 +12,13 @@ uploaded_file = st.file_uploader("🔍 Test Verinizi Yükleyin (CSV - .csv)", ty
 
 if uploaded_file:
     try:
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file, encoding="utf-8", sep=",")
+    except UnicodeDecodeError:
+        df = pd.read_csv(uploaded_file, encoding="ISO-8859-9", sep=",")
+    except Exception as e:
+        st.error(f"📛 Dosya yükleme hatası: {e}")
+        st.stop()
+
 
         # Devir Hızı eksikse yeniden hesapla
         if "Devir_Hizi" not in df.columns:
