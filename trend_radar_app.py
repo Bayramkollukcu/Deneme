@@ -12,88 +12,83 @@ if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
 
-        # Gerekli sütun kontrolü
-        required_columns = ["Urun_Adi", "Stok_Adedi", "Satis_Adedi", "Kategori", "CR", "CTR", "Add_To_Card"]
-        missing_columns = [col for col in required_columns if col not in df.columns]
+        # Tüm sütun isimlerini normalize et
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        if missing_columns:
-            st.error(f"❌ Eksik sütunlar: {', '.join(missing_columns)}")
-        else:
-            # Add_To_Card olduğu gibi STR olarak hesaplama yapılacak
-            df["Devir_Hizi"] = df["Satis_Adedi"] / df["Stok_Adedi"].replace(0, np.nan)
-            df["STR"] = df["Add_To_Card"]
+        # Otomatik sütun eşleştirmesi
+        col_map = {
+            "urun_adi": None,
+            "stok_adedi": None,
+            "satis_adedi": None,
+            "kategori": None,
+            "ctr": None,
+            "cr": None,
+            "add_to_card": None
+        }
 
-            z_skorlar = []
-            for kategori in df["Kategori"].unique():
-                sub_df = df[df["Kategori"] == kategori].copy()
-                sub_df["Z_CTR"] = (sub_df["CTR"] - sub_df["CTR"].mean()) / sub_df["CTR"].std()
-                sub_df["Z_CR"] = (sub_df["CR"] - sub_df["CR"].mean()) / sub_df["CR"].std()
-                sub_df["Z_STR"] = (sub_df["STR"] - sub_df["STR"].mean()) / sub_df["STR"].std()
-                sub_df["Z_Devir"] = (sub_df["Devir_Hizi"] - sub_df["Devir_Hizi"].mean()) / sub_df["Devir_Hizi"].std()
-                sub_df["Trend_Skoru"] = (sub_df["Z_CTR"] + sub_df["Z_CR"] + sub_df["Z_STR"] + sub_df["Z_Devir"]) / 4
-                z_skorlar.append(sub_df)
+        for col in df.columns:
+            for key in col_map.keys():
+                if key in col:
+                    col_map[key] = col
 
-            scored_df = pd.concat(z_skorlar)
+        # Eksik sütun kontrolü
+        eksik = [k for k, v in col_map.items() if v is None]
+        if eksik:
+            st.error(f"❌ Eksik veya tanınmayan sütun(lar): {', '.join(eksik)}")
+            st.stop()
 
-            trend_esik = st.sidebar.slider(
-                label="Trend kabul edilmesi için skor eşiği",
-                min_value=0.0,
-                max_value=5.0,
-                step=0.1,
-                value=1.0
-            )
+        # Gerekli sütunları yeniden adlandır
+        df = df.rename(columns={v: k for k, v in col_map.items()})
+        df["devir_hizi"] = df["satis_adedi"] / df["stok_adedi"].replace(0, np.nan)
+        df["str"] = df["add_to_card"]
 
-            kategori_secimi = st.selectbox("📌 Kategori Türü:", options=scored_df["Kategori"].unique())
+        # Z-Skor ve Trend Skoru Hesapla
+        skorlar = []
+        for kategori in df["kategori"].unique():
+            sub = df[df["kategori"] == kategori].copy()
+            sub["z_ctr"] = (sub["ctr"] - sub["ctr"].mean()) / sub["ctr"].std()
+            sub["z_cr"] = (sub["cr"] - sub["cr"].mean()) / sub["cr"].std()
+            sub["z_str"] = (sub["str"] - sub["str"].mean()) / sub["str"].std()
+            sub["z_devir"] = (sub["devir_hizi"] - sub["devir_hizi"].mean()) / sub["devir_hizi"].std()
+            sub["trend_skoru"] = (sub["z_ctr"] + sub["z_cr"] + sub["z_str"] + sub["z_devir"]) / 4
+            skorlar.append(sub)
 
-            df_kategori = scored_df[scored_df["Kategori"] == kategori_secimi].copy()
-            df_kategori = df_kategori.sort_values(by="Trend_Skoru", ascending=False)
+        scored_df = pd.concat(skorlar)
 
-            st.markdown("### 📊 Kategori Bazında Trend Skorları")
+        st.sidebar.markdown("### 🎚️ Trend Eşiği Seç")
+        esik = st.sidebar.slider("Trend kabul skoru", 0.0, 5.0, 1.0, 0.1)
 
-            chart = alt.Chart(df_kategori).mark_bar().encode(
-                x=alt.X("Urun_Adi:N", sort='-y', title="Ürün"),
-                y=alt.Y("Trend_Skoru:Q", title="Skor"),
-                color=alt.condition(
-                    f"datum.Trend_Skoru >= {trend_esik}",
-                    alt.value("#27ae60"),  # yeşil
-                    alt.value("#bdc3c7")   # gri
-                ),
-                tooltip=["Urun_Adi", "Trend_Skoru"]
-            ).properties(width=1000, height=400)
+        kategori_secimi = st.selectbox("📁 Kategori Seçiniz", scored_df["kategori"].unique())
+        df_kat = scored_df[scored_df["kategori"] == kategori_secimi].copy()
+        df_kat = df_kat.sort_values(by="trend_skoru", ascending=False)
 
-            threshold_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(
-                color="red", strokeDash=[4, 4]
-            ).encode(y="y")
+        st.markdown("### 📊 Trend Skoru Grafiği")
 
-            st.altair_chart(chart + threshold_line, use_container_width=True)
+        grafik = alt.Chart(df_kat).mark_bar().encode(
+            x=alt.X("urun_adi:N", sort='-y'),
+            y=alt.Y("trend_skoru:Q"),
+            color=alt.condition(f"datum.trend_skoru >= {esik}", alt.value("#27ae60"), alt.value("#bdc3c7")),
+            tooltip=["urun_adi", "trend_skoru"]
+        ).properties(width=1000, height=400)
 
-            trend_urunler = df_kategori[df_kategori["Trend_Skoru"] >= trend_esik]
+        threshold = alt.Chart(pd.DataFrame({"y": [esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
+        st.altair_chart(grafik + threshold, use_container_width=True)
 
-            @st.cache_data
-            def yapay_zeka_ozeti(row):
-                urun = row["Urun_Adi"]
-                skor = row["Trend_Skoru"]
-                yorum = f"⚡ Bu ürün {skor:.2f} puanlık trend skoru ile öne çıkıyor!"
-                sosyal = f"📣 Yeni trend alarmı! {urun} bu hafta favoriler arasında! #trendürün #stil"
-                return yorum + "\n\n**📲 Sosyal Medya İçeriği:**\n" + sosyal
+        st.markdown(f"### 🔥 `{kategori_secimi}` Trend Ürünler")
 
-            st.markdown(f"### 🔥 `{kategori_secimi}` Kategorisindeki Trend Ürünler (Skor ≥ {trend_esik})")
+        trendler = df_kat[df_kat["trend_skoru"] >= esik]
 
-            for _, row in trend_urunler.iterrows():
-                with st.container():
-                    cols = st.columns([1, 3])
-                    with cols[0]:
-                        st.image(row.get("Gorsel", "https://via.placeholder.com/120"), width=100)
-                    with cols[1]:
-                        st.markdown(f"**{row['Urun_Adi']}**")
-                        st.caption(f"{row.get('Aciklama', '')}")
-                        st.write(f"Trend Skoru: `{row['Trend_Skoru']:.2f}`")
-                        with st.expander("🧠 Yapay Zeka Yorumu"):
-                            st.markdown(yapay_zeka_ozeti(row))
-
-            st.info("ℹ️ Bu prototip kendi yüklediğiniz test verisiyle çalışmaktadır.")
+        for _, row in trendler.iterrows():
+            with st.container():
+                cols = st.columns([1, 3])
+                with cols[0]:
+                    st.image(row.get("gorsel", "https://via.placeholder.com/100"), width=100)
+                with cols[1]:
+                    st.markdown(f"**{row['urun_adi']}**")
+                    st.caption(f"{row.get('aciklama', '')}")
+                    st.write(f"Trend Skoru: `{row['trend_skoru']:.2f}`")
 
     except Exception as e:
-        st.error(f"❌ Beklenmeyen bir hata oluştu: {e}")
+        st.error(f"❌ Hata: {str(e)}")
 else:
     st.info("Lütfen bir .csv dosyası yükleyin.")
