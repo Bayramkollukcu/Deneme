@@ -25,7 +25,7 @@ if uploaded_file:
             df["Devir_Hizi"] = df["Satis_Adedi"] / df["Stok_Adedi"].replace(0, np.nan)
 
         # STR adlandırması
-        if "Add To Card" in df.columns:
+        if "Add_To_Card" in df.columns:
             df.rename(columns={"Add To Card": "STR"}, inplace=True)
 
         # Z-Skor hesaplamaları
