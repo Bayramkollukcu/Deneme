@@ -6,43 +6,39 @@ import altair as alt
 st.set_page_config(page_title="Trend Radar", page_icon="📈", layout="wide")
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
 
-uploaded_file = st.file_uploader("📂 Test Verinizi Yükleyin (.csv)", type=["csv"])
+uploaded_file = st.file_uploader("📂 CSV dosyanızı yükleyin", type=["csv"])
 
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
 
-        # Tüm sütun isimlerini normalize et
+        # Sütun isimlerini normalize et
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        # Otomatik sütun eşleştirmesi
+        # ✅ Sizin verinize özel sütun eşleştirme
         col_map = {
-            "urun_adi": None,
-            "stok_adedi": None,
-            "satis_adedi": None,
-            "kategori": None,
-            "ctr": None,
-            "cr": None,
-            "add_to_card": None
+            "urun_adi": "urun_tanimi",
+            "stok_adedi": "stok",
+            "satis_adedi": "satis",
+            "kategori": "kategori",
+            "ctr": "ctr",
+            "cr": "cr",
+            "add_to_card": "add_to_card"
         }
 
-        for col in df.columns:
-            for key in col_map.keys():
-                if key in col:
-                    col_map[key] = col
+        # Gerekli sütunları kontrol et
+        for key, val in col_map.items():
+            if val not in df.columns:
+                st.error(f"❌ Eksik sütun: {val} (kodda {key} olarak bekleniyor)")
+                st.stop()
 
-        # Eksik sütun kontrolü
-        eksik = [k for k, v in col_map.items() if v is None]
-        if eksik:
-            st.error(f"❌ Eksik veya tanınmayan sütun(lar): {', '.join(eksik)}")
-            st.stop()
-
-        # Gerekli sütunları yeniden adlandır
+        # Kodun beklediği sütunlara yeniden adlandır
         df = df.rename(columns={v: k for k, v in col_map.items()})
+
         df["devir_hizi"] = df["satis_adedi"] / df["stok_adedi"].replace(0, np.nan)
         df["str"] = df["add_to_card"]
 
-        # Z-Skor ve Trend Skoru Hesapla
+        # Z skor ve trend skoru hesapla
         skorlar = []
         for kategori in df["kategori"].unique():
             sub = df[df["kategori"] == kategori].copy()
@@ -55,27 +51,32 @@ if uploaded_file:
 
         scored_df = pd.concat(skorlar)
 
-        st.sidebar.markdown("### 🎚️ Trend Eşiği Seç")
-        esik = st.sidebar.slider("Trend kabul skoru", 0.0, 5.0, 1.0, 0.1)
+        # Arayüz - eşik seçimi
+        st.sidebar.markdown("### 🎚️ Trend Skor Eşiği")
+        esik = st.sidebar.slider("Trend skoru eşiği", 0.0, 5.0, 1.0, 0.1)
 
-        kategori_secimi = st.selectbox("📁 Kategori Seçiniz", scored_df["kategori"].unique())
+        # Kategori seçimi
+        kategori_secimi = st.selectbox("📂 Kategori Seçin", scored_df["kategori"].unique())
         df_kat = scored_df[scored_df["kategori"] == kategori_secimi].copy()
         df_kat = df_kat.sort_values(by="trend_skoru", ascending=False)
 
+        # Grafik
         st.markdown("### 📊 Trend Skoru Grafiği")
-
         grafik = alt.Chart(df_kat).mark_bar().encode(
             x=alt.X("urun_adi:N", sort='-y'),
             y=alt.Y("trend_skoru:Q"),
-            color=alt.condition(f"datum.trend_skoru >= {esik}", alt.value("#27ae60"), alt.value("#bdc3c7")),
+            color=alt.condition(
+                f"datum.trend_skoru >= {esik}",
+                alt.value("#2ecc71"),
+                alt.value("#bdc3c7")
+            ),
             tooltip=["urun_adi", "trend_skoru"]
         ).properties(width=1000, height=400)
 
-        threshold = alt.Chart(pd.DataFrame({"y": [esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
-        st.altair_chart(grafik + threshold, use_container_width=True)
+        st.altair_chart(grafik, use_container_width=True)
 
-        st.markdown(f"### 🔥 `{kategori_secimi}` Trend Ürünler")
-
+        # Trend ürünleri göster
+        st.markdown(f"### 🔥 `{kategori_secimi}` Kategorisindeki Trend Ürünler")
         trendler = df_kat[df_kat["trend_skoru"] >= esik]
 
         for _, row in trendler.iterrows():
@@ -85,10 +86,10 @@ if uploaded_file:
                     st.image(row.get("gorsel", "https://via.placeholder.com/100"), width=100)
                 with cols[1]:
                     st.markdown(f"**{row['urun_adi']}**")
-                    st.caption(f"{row.get('aciklama', '')}")
+                    st.caption(row.get("aciklama", ""))
                     st.write(f"Trend Skoru: `{row['trend_skoru']:.2f}`")
 
     except Exception as e:
-        st.error(f"❌ Hata: {str(e)}")
+        st.error(f"❌ Hata oluştu: {str(e)}")
 else:
     st.info("Lütfen bir .csv dosyası yükleyin.")
