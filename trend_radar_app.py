@@ -3,21 +3,20 @@ import pandas as pd
 import numpy as np
 import altair as alt
 
-st.set_page_config(page_title="Trend Radar", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Trend Radar", page_icon="🧠", layout="wide")
 st.title("🧠 Trend Radar - Ürün Performans Analizi")
 
 uploaded_file = st.file_uploader("🔍 Test Verinizi Yükleyin (CSV - .csv)", type=["csv"])
 
 if uploaded_file:
     try:
-        # CSV dosyasını oku
         df = pd.read_csv(uploaded_file)
 
-        # Devir_Hizi hesapla (sütun yoksa)
-        if "Devir_Hizi" not in df.columns:
-            df["Devir_Hizi"] = df["SatisAdet"] / df["Stok"].replace(0, np.nan)
+        # Devir Hızı hesapla
+        if "Devir_Hizi" not in df.columns and "Satis_Adedi" in df.columns and "Stok_Adedi" in df.columns:
+            df["Devir_Hizi"] = df["Satis_Adedi"] / df["Stok_Adedi"].replace(0, np.nan)
 
-        # Z-Skor hesaplama
+        # Kategori içi Z-Skoru hesapla
         z_skorlar = []
         for kategori in df["Kategori"].unique():
             sub_df = df[df["Kategori"] == kategori].copy()
@@ -30,42 +29,42 @@ if uploaded_file:
 
         scored_df = pd.concat(z_skorlar)
 
-        # Trend eşik değeri
+        # Skor eşiği slider
         trend_esik = st.sidebar.slider(
             label="Trend kabul edilmesi için skor eşiği",
-            min_value=0.5,
-            max_value=2.5,
+            min_value=0.0,
+            max_value=5.0,
             step=0.1,
-            value=1.0
+            value=0.5
         )
 
         # Kategori seçimi
         st.markdown("### 📂 Kategori Bazında Trend Skorları")
-        kategori_secimi = st.selectbox("Kategori Türü:", options=scored_df["Kategori"].unique())
+        kategori_secimi = st.selectbox("Kategori Türü:", options=sorted(scored_df["Kategori"].unique()))
         df_kategori = scored_df[scored_df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
 
-        # Grafik
+        # Grafik: Trend Skoru Bar Chart
         grafik = alt.Chart(df_kategori).mark_bar().encode(
-            x=alt.X("Urun_Ad", sort="-y", title="Ürün"),
+            x=alt.X("Urun_Adi:N", sort=df_kategori["Urun_Adi"].tolist(), title="Ürün"),
             y=alt.Y("Trend_Skoru", title="Skor"),
             color=alt.condition(
                 f"datum.Trend_Skoru >= {trend_esik}",
                 alt.value("#2ecc71"),
                 alt.value("#bdc3c7")
             ),
-            tooltip=["Urun_Ad", "Trend_Skoru"]
-        ).properties(width=800, height=400)
+            tooltip=["Urun_Adi", "Trend_Skoru"]
+        ).properties(width=900, height=400)
 
         y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
 
         st.altair_chart(grafik + y_line, use_container_width=True)
 
-        # Trend Ürünler
+        # Trend Ürün Kartları
         trend_urunler = df_kategori[df_kategori["Trend_Skoru"] >= trend_esik]
 
         @st.cache_data
         def performans_ozeti(row):
-            urun_adi = row["Urun_Ad"]
+            urun_adi = row["Urun_Adi"]
             mesaj = "⚡ Bu ürün, yüksek etkileşim, güçlü dönüşüm oranı ve yüksek devir hızıyla öne çıkıyor."
             post = f"✨ Yeni trend alarmı! {urun_adi} bu hafta satış ve ilgide zirveye oynuyor. Sen de kaçırma! 🔥 #trendürün #stil #yenisezon"
             return mesaj + "\n\n**📣 Sosyal Medya Önerisi:**\n" + post
@@ -75,16 +74,16 @@ if uploaded_file:
             with st.container():
                 cols = st.columns([1, 3])
                 with cols[0]:
-                    st.image(row.get("Resim_link", "https://via.placeholder.com/100"), width=100)
+                    st.image(row.get("Gorsel", "https://via.placeholder.com/100"), width=100)
                 with cols[1]:
-                    st.markdown(f"**{row['Urun_Ad']}**")
-                    st.caption(f"{row.get('Urun_Tip', '')}")
+                    st.markdown(f"**{row['Urun_Adi']}**")
+                    st.caption(f"{row.get('Aciklama', '')}")
                     st.write(f"Trend Skoru: `{row['Trend_Skoru']:.2f}`")
                     with st.expander("🧠 Yapay Zeka Yorumu"):
                         st.markdown(performans_ozeti(row))
 
-        st.caption("ℹ️ Bu prototip kendi yüklediğiniz CSV dosyasıyla çalışmaktadır.")
+        st.caption("ℹ️ Bu prototip kendi yüklediğiniz test verisiyle çalışmaktadır.")
     except Exception as e:
-        st.error(f"❌ Hata oluştu: {e}")
+        st.error(f"❌ Hata oluştu: {str(e)}")
 else:
     st.info("Lütfen bir .csv veri dosyası yükleyin.")
