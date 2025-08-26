@@ -3,96 +3,85 @@ import pandas as pd
 import numpy as np
 import altair as alt
 
-# Sayfa başlığı ve ayarları
+# Sayfa ayarı
 st.set_page_config(page_title="Trend Radar", page_icon="📊", layout="wide")
-st.title("📊 Trend Radar - Google Trends Entegre Ürün Analizi")
+st.title("🚀 Trend Radar – Google Trends Entegre Performans")
 
-# Dosya yükleyici
-uploaded_file = st.file_uploader("📁 Lütfen .csv dosyanızı yükleyin", type=["csv"])
+# Dosya yükleme
+uploaded_file = st.file_uploader("📂 Lütfen .CSV dosyanızı yükleyin", type=["csv"])
 
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
 
-        # Gerekli sütunlar kontrolü
-        gerekli_sutunlar = [
-            "Urun_Kodu", "Urun_Ad", "Kategori", "Urun_Tip", "Resim_link",
-            "CTR", "CR", "Add_To_Card", "Devir_Hizi", "google_trends_skoru"
+        # Zorunlu sütunlar
+        expected_columns = [
+            "UrUn_Kodu", "Kategori", "CTR", "CR", "Add_To_Card", "Stok",
+            "SatisAdet", "Devir_Hizi", "Resim_link", "Urun_Ad", "Urun_Tip", "google_Trends_scoru"
         ]
-        eksik = [col for col in gerekli_sutunlar if col not in df.columns]
-        if eksik:
-            st.error(f"❌ Eksik sütun(lar): {', '.join(eksik)}")
-            st.stop()
+        for col in expected_columns:
+            if col not in df.columns:
+                st.error(f"❌ Eksik sütun: {col}")
+                st.stop()
 
-        # Z-skorları hesapla (varsa atla)
-        for metrik in ["CTR", "CR", "Add_To_Card", "Devir_Hizi", "google_trends_skoru"]:
-            if f"Z_{metrik}" not in df.columns:
-                df[f"Z_{metrik}"] = (df[metrik] - df[metrik].mean()) / df[metrik].std()
+        # Z-skor hesaplama
+        z_skorlar = []
+        for kategori in df["Kategori"].unique():
+            sub_df = df[df["Kategori"] == kategori].copy()
 
-        # Final trend skoru (%70 lokal metrikler, %30 Google Trends)
-        df["Trend_Skoru"] = (
-            (df["Z_CTR"] + df["Z_CR"] + df["Z_Add_To_Card"] + df["Z_Devir_Hizi"]) / 4 * 0.7
-            + df["Z_google_trends_skoru"] * 0.3
-        )
+            sub_df["Z_CTR"] = (sub_df["CTR"] - sub_df["CTR"].mean()) / sub_df["CTR"].std()
+            sub_df["Z_CR"] = (sub_df["CR"] - sub_df["CR"].mean()) / sub_df["CR"].std()
+            sub_df["Z_STR"] = (sub_df["Add_To_Card"] - sub_df["Add_To_Card"].mean()) / sub_df["Add_To_Card"].std()
+            sub_df["Z_Devir"] = (sub_df["Devir_Hizi"] - sub_df["Devir_Hizi"].mean()) / sub_df["Devir_Hizi"].std()
+            sub_df["Z_Trends"] = (sub_df["google_Trends_scoru"] - sub_df["google_Trends_scoru"].mean()) / sub_df["google_Trends_scoru"].std()
 
-        # Kullanıcı eşiği
-        trend_esik = st.sidebar.slider(
-            "Trend kabul edilmesi için skor eşiği:",
-            min_value=-2.0, max_value=3.0, value=1.0, step=0.1
-        )
+            # Final Trend Skoru (Google Trends %30 ağırlıklı)
+            sub_df["Trend_Skoru"] = (
+                0.7 * (sub_df["Z_CTR"] + sub_df["Z_CR"] + sub_df["Z_STR"] + sub_df["Z_Devir"]) / 4 +
+                0.3 * sub_df["Z_Trends"]
+            )
 
-        # Kategori filtresi
-        kategori_secimi = st.selectbox("📂 Kategori seçin", sorted(df["Kategori"].unique()))
-        df_kategori = df[df["Kategori"] == kategori_secimi].copy()
+            z_skorlar.append(sub_df)
 
-        # Trend skoruna göre sırala
-        df_kategori.sort_values(by="Trend_Skoru", ascending=False, inplace=True)
+        scored_df = pd.concat(z_skorlar)
 
-        # Altair grafik
-        chart = alt.Chart(df_kategori).mark_bar().encode(
-            x=alt.X("Urun_Kodu:N", sort="-y", title="Ürün Kodu"),
+        # Sidebar eşik ve kategori
+        trend_esik = st.sidebar.slider("📈 Trend Skor Eşiği", 0.5, 2.5, 1.0, 0.1)
+        kategori_secimi = st.sidebar.selectbox("📁 Kategori Seçin", scored_df["Kategori"].unique())
+        df_kategori = scored_df[scored_df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
+
+        # Bar grafiği
+        grafik = alt.Chart(df_kategori).mark_bar().encode(
+            x=alt.X("UrUn_Kodu:N", sort="-y", title="Ürün Kodu"),
             y=alt.Y("Trend_Skoru:Q", title="Trend Skoru"),
-            color=alt.condition(
-                f"datum.Trend_Skoru >= {trend_esik}",
-                alt.value("#27ae60"),  # yeşil
-                alt.value("#bdc3c7")   # gri
-            ),
-            tooltip=[
-                "Urun_Kodu", "Urun_Ad", "Trend_Skoru", "CTR", "CR", "Add_To_Card", "Devir_Hizi", "google_trends_skoru"
-            ]
-        ).properties(width=900, height=400)
+            color=alt.condition(f"datum.Trend_Skoru >= {trend_esik}", alt.value("green"), alt.value("lightgray")),
+            tooltip=["Urun_Ad", "Trend_Skoru", "google_Trends_scoru"]
+        ).properties(width=800, height=400)
 
-        threshold_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(
-            color="red", strokeDash=[4, 4]
-        ).encode(y='y')
+        y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(color="red", strokeDash=[4, 4]).encode(y="y")
+        st.altair_chart(grafik + y_line, use_container_width=True)
 
-        st.altair_chart(chart + threshold_line, use_container_width=True)
-
-        # Trend ürünler
+        # Filtrelenen trend ürünler
         trend_urunler = df_kategori[df_kategori["Trend_Skoru"] >= trend_esik]
 
-        # Trend ürünler görselleştir
-        st.markdown(f"### 🔥 Trend Ürünler (Skor ≥ {trend_esik}) - {kategori_secimi}")
+        # Trend ürünleri göster
+        st.markdown(f"### 🔥 {kategori_secimi} Kategorisindeki Trend Ürünler (Skor ≥ {trend_esik})")
         for _, row in trend_urunler.iterrows():
             with st.container():
                 cols = st.columns([1, 3])
                 with cols[0]:
-                    st.image(row["Resim_link"], width=100)
+                    st.image(row.get("Resim_link", "https://via.placeholder.com/100"), width=100)
                 with cols[1]:
-                    st.markdown(f"**{row['Urun_Ad']}** ({row['Urun_Kodu']})")
-                    st.caption(f"Tip: {row['Urun_Tip']}, Kategori: {row['Kategori']}")
-                    st.write(f"🔢 Trend Skoru: `{row['Trend_Skoru']:.2f}`")
-                    st.progress(min(max((row["Trend_Skoru"] + 2) / 5, 0.0), 1.0))  # normalize bar
-                    with st.expander("📣 Sosyal Medya Mesajı"):
-                        st.markdown(
-                            f"✨ Yeni trend alarmı! **{row['Urun_Ad']}** şu anda en çok ilgi gören ürünlerden biri. "
-                            f"Satışları artıyor, ilgiyi kaçırma! 🔥\n\n"
-                            f"#trendürün #{row['Kategori']} #{row['Urun_Tip']}"
-                        )
+                    st.markdown(f"**{row['Urun_Ad']}** (`{row['UrUn_Kodu']}`)")
+                    st.caption(f"{row.get('Urun_Tip', '')}")
+                    st.write(f"Trend Skoru: `{row['Trend_Skoru']:.2f}`")
+                    st.write(f"Google Trends Skoru: `{row['google_Trends_scoru']:.0f}`")
+                    with st.expander("💡 Yorum"):
+                        st.markdown("Bu ürün, kategori ortalamasının üzerinde ilgi ve performans gösteriyor.")
 
-        st.caption("ℹ️ Verilerde Z-skorlar ve Google Trends skoru normalize edilmiştir.")
+        st.success("✅ Tüm skorlar başarıyla hesaplandı.")
 
     except Exception as e:
-        st.error(f"❌ Hata oluştu: {e}")
+        st.error(f"❌ Hata oluştu: {str(e)}")
 else:
-    st.info("📌 Devam etmek için lütfen bir `.csv` dosyası yükleyin.")
+    st.info("📥 Lütfen analiz için bir .csv dosyası yükleyin.")
