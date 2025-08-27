@@ -1,80 +1,92 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import requests
 from io import BytesIO
 
-# Veri yükleme
+# Başlık
+st.title("📁 Kategori Bazında Trend Skorları")
+
+# CSV dosyasını yükle
 df = pd.read_csv("data_kadin_hunter_trends_ready.csv")
 
+# Trend skoru hesaplama
+df["trend_skoru"] = (
+    df["CTR"].rank(pct=True) +
+    df["CR"].rank(pct=True) +
+    df["Add_To_Card"].rank(pct=True) +
+    df["SatisAdet"].rank(pct=True) +
+    df["Devir_Hizi"].rank(pct=True) +
+    df["google_Trends_skoru"].rank(pct=True) * 0.3
+)
+
+# Z-score normalizasyonu
+df["trend_skoru_z"] = (df["trend_skoru"] - df["trend_skoru"].mean()) / df["trend_skoru"].std()
+
+# Kategori seçimi
+kategori_sec = st.selectbox("Kategori Türü:", df["Kategori"].unique())
+df_kategori = df[df["Kategori"] == kategori_sec].copy()
+df_kategori = df_kategori.sort_values("trend_skoru_z", ascending=False)
+
+# Grafik çizimi
+fig, ax = plt.subplots(figsize=(12, 5))
+bars = ax.bar(
+    df_kategori["UrUn_Kodu"],
+    df_kategori["trend_skoru_z"],
+    color=["green" if x >= 1.0 else "lightgray" for x in df_kategori["trend_skoru_z"]]
+)
+ax.axhline(y=1.0, color="red", linestyle="dashed")
+plt.xticks(rotation=90)
+plt.xlabel("Ürün Kodu")
+plt.ylabel("Skor")
+st.pyplot(fig)
+
 # Trend ürünleri filtrele
-trend_urunler = df[df["Trend_Skoru"] >= 1]
+trend_urunler = df_kategori[df_kategori["trend_skoru_z"] >= 1.0]
 
-# İlk trend ürünü seç
-urun = trend_urunler.iloc[0]
-urun_adi = urun["Urun_Ad"]
-urun_kodu = urun["UrUn_Kodu"]
-urun_tipi = urun["Urun_Tip"]
-resim_url = urun["Resim_link"]
+st.markdown(f"### 🔥 `{kategori_sec}` Kategorisindeki Trend Ürünler (Skor ≥ 1.0)")
 
-# Ürün tipi bazlı sosyal medya metinleri
-tip_yorumlari = {
-    "tisort": "{} ile sokak modasına yön ver!",
-    "jean": "{} ile şıklığın yeni adı!",
-    "elbise": "{} ile zarafet trendini yakala!",
-    "etek": "{} ile enerjini yansıt!",
-    "pantolon": "{} ile gün boyu konfor ve stil!",
-    "ceket": "{} ile farkını ortaya koy!",
-    "bluz": "{} ile tarzını konuştur!",
-}
+# Trend ürünleri detaylı listele
+for index, row in trend_urunler.iterrows():
+    urun_ad = row["Urun_Ad"]
+    urun_kodu = row["UrUn_Kodu"]
+    urun_tip = row["Urun_Tip"]
+    resim_url = row["Resim_link"]
+    aciklama = f"{urun_ad} ile trend dalgasını yakala! 🌊"
 
-def urun_tipi_yorum_yap(urun_adi, urun_tipi):
-    yorum_sablonu = tip_yorumlari.get(urun_tipi.lower(), "{} ile tarzına tarz kat!")
-    return yorum_sablonu.format(urun_adi)
+    # Ürün kartı
+    with st.expander(aciklama):
+        try:
+            response = requests.get(resim_url)
+            img = Image.open(BytesIO(response.content))
+            st.image(img, caption=row["Urun_Ad"], use_column_width=True)
+        except:
+            st.warning("📷 Ürün görseli yüklenemedi.")
+        
+        # Sosyal medya paylaşımı önerisi
+        sosyal_medya_postu = f"🛍️ {urun_ad} | Yeni sezonda {urun_tip.lower()} modasının en gözde parçası! Bu ürünle trend dalgasını yakala! 💫 #trend #moda #stil"
+        st.markdown(f"💬 {sosyal_medya_postu}")
 
-sosyal_medya_postu = urun_tipi_yorum_yap(urun_adi, urun_tipi)
+        # Görsel şablon oluştur ve indir
+        st.subheader("📸 Sosyal Medya Görseli Hazırla")
+        from PIL import ImageDraw, ImageFont
 
-# Görsel başlığı
-st.markdown(f"💬 **{sosyal_medya_postu} 🌊**")
+        img_canvas = Image.new("RGB", (800, 800), color="white")
+        draw = ImageDraw.Draw(img_canvas)
 
-# 📸 Görsel Hazırlama Paneli
-with st.expander("📸 Sosyal Medya Görseli Hazırla"):
+        # Başlık
+        draw.text((30, 30), urun_ad, fill="black")
 
-    # Resmi yükle (veya boş görsel kullan)
-    try:
-        response = requests.get(resim_url)
-        image = Image.open(BytesIO(response.content)).convert("RGB")
-    except:
-        image = Image.new("RGB", (512, 512), color=(230, 230, 230))
+        # Alt açıklama
+        draw.text((30, 100), aciklama, fill="gray")
 
-    # Sosyal medya şablonu oluştur
-    img_width, img_height = 512, 512
-    sosyal_gorsel = Image.new("RGB", (img_width, img_height + 150), (255, 255, 255))
-    sosyal_gorsel.paste(image.resize((img_width, img_height)), (0, 0))
-
-    draw = ImageDraw.Draw(sosyal_gorsel)
-
-    # Fontlar
-    try:
-        font_b = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
-        font_r = ImageFont.truetype("DejaVuSans.ttf", 20)
-    except:
-        font_b = font_r = None  # Streamlit online kullanımı için fallback
-
-    # Yazı ekle
-    draw.text((20, img_height + 10), urun_adi, font=font_b, fill=(0, 0, 0))
-    draw.text((20, img_height + 50), sosyal_medya_postu, font=font_r, fill=(60, 60, 60))
-
-    # Görseli göster
-    st.image(sosyal_gorsel, caption="📷 Sosyal Medya Görseli", use_column_width=True)
-
-    # İndir butonu
-    buf = BytesIO()
-    sosyal_gorsel.save(buf, format="PNG")
-    st.download_button(
-        label="⬇️ Görseli İndir",
-        data=buf.getvalue(),
-        file_name=f"{urun_adi.replace(' ', '_')}_sosyalmedya.png",
-        mime="image/png"
-    )
+        st.image(img_canvas, caption="📷 Sosyal Medya Görseli")
+        img_buffer = BytesIO()
+        img_canvas.save(img_buffer, format="PNG")
+        st.download_button(
+            label="⬇️ Görseli İndir",
+            data=img_buffer.getvalue(),
+            file_name=f"{urun_kodu}_sosyal_medya.png",
+            mime="image/png"
+        )
