@@ -1,124 +1,80 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import altair as alt
+import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw, ImageFont
 import requests
 from io import BytesIO
 
-st.set_page_config(page_title="Trend Radar", page_icon="🌐", layout="wide")
-st.title("📈 Trend Radar - Ürün Performans ve Sosyal Medya Paylaşımı")
-
 # Veri yükleme
-uploaded_file = st.file_uploader("🔍 Test Verinizi Yükleyin (CSV - .csv)", type=["csv"])
+df = pd.read_csv("data_kadin_hunter_trends_ready.csv")
 
-if uploaded_file:
+# Trend ürünleri filtrele
+trend_urunler = df[df["Trend_Skoru"] >= 1]
+
+# İlk trend ürünü seç
+urun = trend_urunler.iloc[0]
+urun_adi = urun["Urun_Ad"]
+urun_kodu = urun["UrUn_Kodu"]
+urun_tipi = urun["Urun_Tip"]
+resim_url = urun["Resim_link"]
+
+# Ürün tipi bazlı sosyal medya metinleri
+tip_yorumlari = {
+    "tisort": "{} ile sokak modasına yön ver!",
+    "jean": "{} ile şıklığın yeni adı!",
+    "elbise": "{} ile zarafet trendini yakala!",
+    "etek": "{} ile enerjini yansıt!",
+    "pantolon": "{} ile gün boyu konfor ve stil!",
+    "ceket": "{} ile farkını ortaya koy!",
+    "bluz": "{} ile tarzını konuştur!",
+}
+
+def urun_tipi_yorum_yap(urun_adi, urun_tipi):
+    yorum_sablonu = tip_yorumlari.get(urun_tipi.lower(), "{} ile tarzına tarz kat!")
+    return yorum_sablonu.format(urun_adi)
+
+sosyal_medya_postu = urun_tipi_yorum_yap(urun_adi, urun_tipi)
+
+# Görsel başlığı
+st.markdown(f"💬 **{sosyal_medya_postu} 🌊**")
+
+# 📸 Görsel Hazırlama Paneli
+with st.expander("📸 Sosyal Medya Görseli Hazırla"):
+
+    # Resmi yükle (veya boş görsel kullan)
     try:
-        df = pd.read_csv(uploaded_file)
+        response = requests.get(resim_url)
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+    except:
+        image = Image.new("RGB", (512, 512), color=(230, 230, 230))
 
-        # Gerekli sütun kontrolü
-        required_columns = ["UrUn_Kodu", "Kategori", "CTR", "CR", "Add_To_Card", "Stok", "SatisAdet", "Devir_Hizi", "Resim_link", "Urun_Ad", "Urun_Tip", "google_Trends_skoru"]
-        eksik = [col for col in required_columns if col not in df.columns]
-        if eksik:
-            st.error(f"❌ Eksik sütun(lar): {', '.join(eksik)}")
-            st.stop()
+    # Sosyal medya şablonu oluştur
+    img_width, img_height = 512, 512
+    sosyal_gorsel = Image.new("RGB", (img_width, img_height + 150), (255, 255, 255))
+    sosyal_gorsel.paste(image.resize((img_width, img_height)), (0, 0))
 
-        # Trend Skoru Hesaplama
-        df["Z_CTR"] = (df["CTR"] - df["CTR"].mean()) / df["CTR"].std()
-        df["Z_CR"] = (df["CR"] - df["CR"].mean()) / df["CR"].std()
-        df["Z_STR"] = (df["Add_To_Card"] - df["Add_To_Card"].mean()) / df["Add_To_Card"].std()
-        df["Z_Devir"] = (df["Devir_Hizi"] - df["Devir_Hizi"].mean()) / df["Devir_Hizi"].std()
-        df["Z_Trends"] = (df["google_Trends_skoru"] - df["google_Trends_skoru"].mean()) / df["google_Trends_skoru"].std()
+    draw = ImageDraw.Draw(sosyal_gorsel)
 
-        df["Trend_Skoru"] = (
-            0.25 * df["Z_CTR"] +
-            0.25 * df["Z_CR"] +
-            0.20 * df["Z_STR"] +
-            0.20 * df["Z_Devir"] +
-            0.10 * df["Z_Trends"]
-        )
+    # Fontlar
+    try:
+        font_b = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
+        font_r = ImageFont.truetype("DejaVuSans.ttf", 20)
+    except:
+        font_b = font_r = None  # Streamlit online kullanımı için fallback
 
-        st.sidebar.markdown("### ⚙️ Ayarlar")
-        trend_esik = st.sidebar.slider("Trend Skor Eşiği", 0.0, 2.5, 1.0, 0.1)
+    # Yazı ekle
+    draw.text((20, img_height + 10), urun_adi, font=font_b, fill=(0, 0, 0))
+    draw.text((20, img_height + 50), sosyal_medya_postu, font=font_r, fill=(60, 60, 60))
 
-        kategori_secimi = st.selectbox("Kategori Seçin", options=df["Kategori"].unique())
-        df_kategori = df[df["Kategori"] == kategori_secimi].sort_values(by="Trend_Skoru", ascending=False)
+    # Görseli göster
+    st.image(sosyal_gorsel, caption="📷 Sosyal Medya Görseli", use_column_width=True)
 
-        # Görsel grafik
-        chart = alt.Chart(df_kategori).mark_bar().encode(
-            x=alt.X("UrUn_Kodu:N", sort="-y", title="Ürün Kodu"),
-            y=alt.Y("Trend_Skoru:Q", title="Trend Skoru"),
-            color=alt.condition(
-                f"datum.Trend_Skoru >= {trend_esik}",
-                alt.value("#27ae60"),
-                alt.value("#bdc3c7")
-            ),
-            tooltip=["Urun_Ad", "Trend_Skoru", "Z_Trends"]
-        ).properties(width=800, height=400)
-
-        st.altair_chart(chart, use_container_width=True)
-
-        trend_urunler = df_kategori[df_kategori["Trend_Skoru"] >= trend_esik]
-
-        st.markdown(f"### 🔥 {kategori_secimi} Kategorisindeki Trend Ürünler")
-        for _, row in trend_urunler.iterrows():
-            with st.container():
-                cols = st.columns([1, 3])
-                with cols[0]:
-                    st.image(row["Resim_link"], width=100)
-                with cols[1]:
-                    st.markdown(f"**{row['Urun_Ad']}**")
-                    st.caption(f"Ürün Tipi: {row['Urun_Tip']}")
-                    st.markdown(f"🔁 **Trend Skoru:** `{row['Trend_Skoru']:.2f}`")
-                    st.markdown(f"📊 **Google Trends Z Skoru:** `{row['Z_Trends']:.2f}`")
-
-                    # Dinamik sosyal medya önerisi
-                    def sosyal_medya_postu(urun_tip, urun_adi):
-                        templates = {
-                            "Tişört": f"Yeni sezonda {urun_adi} ile sokak modasına yön ver! 👕",
-                            "Elbise": f"{urun_adi} ile şıklığın zirvesine çık! 💃",
-                            "Pantolon": f"Konfor ve stil bir arada: {urun_adi} seni bekliyor! 👖",
-                            "Ceket": f"{urun_adi} ile serin havalara tarz kat! 🧥",
-                            "Ayakkabı": f"{urun_adi} adımlarını şıklıkla tamamlıyor! 👟"
-                        }
-                        return templates.get(urun_tip, f"{urun_adi} ile trend dalgasını yakala! 🌊")
-
-                    yorum = sosyal_medya_postu(row["Urun_Tip"], row["Urun_Ad"])
-                    st.markdown(f"💬 _{yorum}_")
-
-                    with st.expander("📸 Sosyal Medya Görseli Hazırla"):
-                        from PIL import ImageFont
-
-                        def generate_social_image(urun_adi, sosyal_metni, resim_url):
-                            try:
-                                response = requests.get(resim_url, timeout=10)
-                                product_img = Image.open(BytesIO(response.content)).convert("RGB")
-                            except:
-                                product_img = Image.new("RGB", (512, 400), (230, 230, 230))
-
-                            width, height = 512, 640
-                            background = Image.new("RGB", (width, height), (255, 255, 255))
-                            product_img = product_img.resize((width, 400))
-                            background.paste(product_img, (0, 0))
-
-                            draw = ImageDraw.Draw(background)
-                            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-                            font_title = ImageFont.truetype(font_path, 22)
-                            font_text = ImageFont.truetype(font_path, 18)
-
-                            draw.text((20, 420), urun_adi, font=font_title, fill=(0, 0, 0))
-                            draw.text((20, 460), sosyal_metni, font=font_text, fill=(60, 60, 60))
-
-                            return background
-
-                        image = generate_social_image(row["Urun_Ad"], yorum, row["Resim_link"])
-                        st.image(image, caption="📷 Sosyal Medya Görseli")
-                        buffer = BytesIO()
-                        image.save(buffer, format="PNG")
-                        st.download_button("⬇️ Görseli İndir", data=buffer.getvalue(), file_name=f"{row['UrUn_Kodu']}.png", mime="image/png")
-
-        st.caption("ℹ️ Bu prototip, CSV dosyanıza göre sosyal medya görselleri hazırlar ve trend ürünleri listeler.")
-    except Exception as e:
-        st.error(f"❌ Hata oluştu: {e}")
-else:
-    st.info("Lütfen geçerli bir .csv dosyası yükleyin.")
+    # İndir butonu
+    buf = BytesIO()
+    sosyal_gorsel.save(buf, format="PNG")
+    st.download_button(
+        label="⬇️ Görseli İndir",
+        data=buf.getvalue(),
+        file_name=f"{urun_adi.replace(' ', '_')}_sosyalmedya.png",
+        mime="image/png"
+    )
