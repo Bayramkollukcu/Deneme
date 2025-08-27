@@ -1,92 +1,153 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from PIL import Image
-import requests
-from io import BytesIO
+import numpy as np
+import altair as alt
+from random import choice
 
-# Başlık
-st.title("📁 Kategori Bazında Trend Skorları")
+st.set_page_config(page_title="Trend Radar", page_icon="📈", layout="wide")
+st.title("📊 Trend Radar - Ürün Performans & Popülarite Skoru")
 
-# CSV dosyasını yükle
-df = pd.read_csv("data_kadin_hunter_trends_ready.csv")
+uploaded_file = st.file_uploader("📂 Lütfen verinizi yükleyin (CSV)", type=["csv"])
 
-# Trend skoru hesaplama
-df["trend_skoru"] = (
-    df["CTR"].rank(pct=True) +
-    df["CR"].rank(pct=True) +
-    df["Add_To_Card"].rank(pct=True) +
-    df["SatisAdet"].rank(pct=True) +
-    df["Devir_Hizi"].rank(pct=True) +
-    df["google_Trends_skoru"].rank(pct=True) * 0.3
-)
+if uploaded_file:
+    try:
+        df = pd.read_csv(uploaded_file)
 
-# Z-score normalizasyonu
-df["trend_skoru_z"] = (df["trend_skoru"] - df["trend_skoru"].mean()) / df["trend_skoru"].std()
+        # Gerekli sütunlar
+        required_columns = [
+            "UrUn_Kodu", "Kategori", "CTR", "CR", "Add_To_Card",
+            "Stok", "SatisAdet", "Devir_Hizi", "Resim_link",
+            "Urun_Ad", "Urun_Tip", "google_Trends_skoru"
+        ]
+        missing = [col for col in required_columns if col not in df.columns]
+        if missing:
+            st.error(f"❌ Eksik sütun(lar): {', '.join(missing)}")
+            st.stop()
 
-# Kategori seçimi
-kategori_sec = st.selectbox("Kategori Türü:", df["Kategori"].unique())
-df_kategori = df[df["Kategori"] == kategori_sec].copy()
-df_kategori = df_kategori.sort_values("trend_skoru_z", ascending=False)
+        # Z-Skorları hesaplama
+        df["Z_CTR"] = (df["CTR"] - df["CTR"].mean()) / df["CTR"].std()
+        df["Z_CR"] = (df["CR"] - df["CR"].mean()) / df["CR"].std()
+        df["Z_STR"] = (df["Add_To_Card"] - df["Add_To_Card"].mean()) / df["Add_To_Card"].std()
+        df["Z_Devir"] = (df["Devir_Hizi"] - df["Devir_Hizi"].mean()) / df["Devir_Hizi"].std()
+        df["Z_GTrend"] = (df["google_Trends_skoru"] - df["google_Trends_skoru"].mean()) / df["google_Trends_skoru"].std()
 
-# Grafik çizimi
-fig, ax = plt.subplots(figsize=(12, 5))
-bars = ax.bar(
-    df_kategori["UrUn_Kodu"],
-    df_kategori["trend_skoru_z"],
-    color=["green" if x >= 1.0 else "lightgray" for x in df_kategori["trend_skoru_z"]]
-)
-ax.axhline(y=1.0, color="red", linestyle="dashed")
-plt.xticks(rotation=90)
-plt.xlabel("Ürün Kodu")
-plt.ylabel("Skor")
-st.pyplot(fig)
-
-# Trend ürünleri filtrele
-trend_urunler = df_kategori[df_kategori["trend_skoru_z"] >= 1.0]
-
-st.markdown(f"### 🔥 `{kategori_sec}` Kategorisindeki Trend Ürünler (Skor ≥ 1.0)")
-
-# Trend ürünleri detaylı listele
-for index, row in trend_urunler.iterrows():
-    urun_ad = row["Urun_Ad"]
-    urun_kodu = row["UrUn_Kodu"]
-    urun_tip = row["Urun_Tip"]
-    resim_url = row["Resim_link"]
-    aciklama = f"{urun_ad} ile trend dalgasını yakala! 🌊"
-
-    # Ürün kartı
-    with st.expander(aciklama):
-        try:
-            response = requests.get(resim_url)
-            img = Image.open(BytesIO(response.content))
-            st.image(img, caption=row["Urun_Ad"], use_column_width=True)
-        except:
-            st.warning("📷 Ürün görseli yüklenemedi.")
-        
-        # Sosyal medya paylaşımı önerisi
-        sosyal_medya_postu = f"🛍️ {urun_ad} | Yeni sezonda {urun_tip.lower()} modasının en gözde parçası! Bu ürünle trend dalgasını yakala! 💫 #trend #moda #stil"
-        st.markdown(f"💬 {sosyal_medya_postu}")
-
-        # Görsel şablon oluştur ve indir
-        st.subheader("📸 Sosyal Medya Görseli Hazırla")
-        from PIL import ImageDraw, ImageFont
-
-        img_canvas = Image.new("RGB", (800, 800), color="white")
-        draw = ImageDraw.Draw(img_canvas)
-
-        # Başlık
-        draw.text((30, 30), urun_ad, fill="black")
-
-        # Alt açıklama
-        draw.text((30, 100), aciklama, fill="gray")
-
-        st.image(img_canvas, caption="📷 Sosyal Medya Görseli")
-        img_buffer = BytesIO()
-        img_canvas.save(img_buffer, format="PNG")
-        st.download_button(
-            label="⬇️ Görseli İndir",
-            data=img_buffer.getvalue(),
-            file_name=f"{urun_kodu}_sosyal_medya.png",
-            mime="image/png"
+        # Trend Skoru
+        df["Trend_Skoru"] = (
+            0.7 * (df["Z_CTR"] + df["Z_CR"] + df["Z_STR"] + df["Z_Devir"]) / 4 +
+            0.3 * df["Z_GTrend"]
         )
+
+        # Kategori filtresi
+        kategori_secimi = st.selectbox("Kategori Seçin:", options=df["Kategori"].unique())
+        trend_esik = st.slider("Trend Skor Eşiği", 0.0, 2.5, 1.0, 0.1)
+
+        # Filtrelenmiş dataframe
+        df_kat = df[df["Kategori"] == kategori_secimi].copy()
+        df_kat = df_kat.sort_values("Trend_Skoru", ascending=False)
+
+        # Grafik
+        st.markdown("### 📈 Trend Skoru Grafiği")
+        grafik = alt.Chart(df_kat).mark_bar().encode(
+            x=alt.X("UrUn_Kodu:N", sort="-y", title="Ürün Kodu"),
+            y=alt.Y("Trend_Skoru:Q", title="Trend Skoru"),
+            color=alt.condition(
+                f"datum.Trend_Skoru >= {trend_esik}",
+                alt.value("#27ae60"),  # yeşil
+                alt.value("#bdc3c7")   # gri
+            ),
+            tooltip=["Urun_Ad", "Trend_Skoru", "Z_GTrend"]
+        ).properties(width=800, height=400)
+
+        y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(
+            color="red", strokeDash=[4, 4]
+        ).encode(y="y")
+
+        st.altair_chart(grafik + y_line, use_container_width=True)
+
+        # Trend ürünler
+        trend_urunler = df_kat[df_kat["Trend_Skoru"] >= trend_esik]
+
+        def sosyal_medya_postu(row):
+            urun_ad = row["Urun_Ad"]
+            urun_tip = row["Urun_Tip"]
+            sozluk = {
+                "Tisort": {
+                    "baslik": [
+                        f"🧢 Yazın favorisi: {urun_ad}",
+                        f"☀️ Güneşli günlerin en rahatı: {urun_ad}",
+                        f"👕 Günlük şıklık: {urun_ad}"
+                    ],
+                    "mesaj": [
+                        "Rahatlık ve tarzı bir araya getiren bu tişört, kombinlerinin tamamlayıcısı olacak.",
+                        "Serin yaz akşamlarının vazgeçilmezi. Şimdi keşfet!",
+                        "Klasik ama etkileyici. Bu tişört seni yansıtsın!"
+                    ]
+                },
+                "Elbise": {
+                    "baslik": [
+                        f"👗 Feminen dokunuş: {urun_ad}",
+                        f"💃 Özgüveni yansıtan elbise: {urun_ad}",
+                        f"🌸 Zarafetin adresi: {urun_ad}"
+                    ],
+                    "mesaj": [
+                        "Hafif kumaşı ve zarif kesimiyle bu elbise, gününü güzelleştirecek.",
+                        "İster davet ister günlük kullanım, çok yönlü şıklık seni bekliyor.",
+                        "Modern çizgilerle feminen stil bir arada. Şimdi keşfet!"
+                    ]
+                },
+                "Pantolon": {
+                    "baslik": [
+                        f"👖 Sokak modasının yıldızı: {urun_ad}",
+                        f"✨ Gündüzden geceye: {urun_ad}",
+                        f"🖤 Yeni sezonun kurtarıcısı: {urun_ad}"
+                    ],
+                    "mesaj": [
+                        "Stil sahibi görünümün sırrı bu pantolonda gizli!",
+                        "Şıklık ve rahatlık bir arada. Dolabında yer aç!",
+                        "Yüksek bel, kaliteli kumaş, kusursuz duruş. Hepsi bir arada."
+                    ]
+                },
+                "Ceket": {
+                    "baslik": [
+                        f"🧥 Sezon geçişinin kurtarıcısı: {urun_ad}",
+                        f"🌬️ Rüzgara stilinle meydan oku!",
+                        f"🔝 Tarzını tamamla: {urun_ad}"
+                    ],
+                    "mesaj": [
+                        "Şehirli ve şık görünüm için bu ceket tam senlik.",
+                        "Kombinlerinin yıldızı olacak modern bir dokunuş.",
+                        "Havanın ne olacağı belli olmaz, stilin hep net olsun!"
+                    ]
+                }
+            }
+            varsayilan = {
+                "baslik": [f"🌟 Yeni sezon parçası: {urun_ad}"],
+                "mesaj": ["Bu özel tasarımı kombinlerine dahil et!"]
+            }
+
+            icerik = sozluk.get(urun_tip, varsayilan)
+            baslik = choice(icerik["baslik"])
+            mesaj = choice(icerik["mesaj"])
+            hashtag = "#stilönerisi #yenisezon #trendlook #kombin #moda #inspo"
+
+            return f"{baslik}\n\n{mesaj}\n\n{hashtag}"
+
+        st.markdown("### 🚀 Trend Dalgasını Yakalayan Ürünler")
+        for _, row in trend_urunler.iterrows():
+            with st.container():
+                cols = st.columns([1, 3])
+                with cols[0]:
+                    st.image(row.get("Resim_link", "https://via.placeholder.com/100"), width=100)
+                with cols[1]:
+                    st.markdown(f"**{row['Urun_Ad']}**")
+                    st.caption(f"{row['Urun_Tip']} / {row['Kategori']}")
+                    st.write(f"🧠 Trend Skoru: `{row['Trend_Skoru']:.2f}`")
+                    st.write(f"🌐 Google Trends Z-Skoru: `{row['Z_GTrend']:.2f}`")
+                    with st.expander("📣 Sosyal Medya Önerisi"):
+                        st.markdown(sosyal_medya_postu(row))
+
+        st.caption("📝 Not: Verileriniz local cihazınızdan yüklenir. Gizlilik korunur.")
+    except Exception as e:
+        st.error(f"❌ Hata oluştu: {str(e)}")
+else:
+    st.info("👆 Lütfen analiz yapmak için .csv dosyanızı yükleyin.")
