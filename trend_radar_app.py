@@ -13,7 +13,6 @@ if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
 
-        # Gerekli sütunlar
         required_columns = [
             "UrUn_Kodu", "Kategori", "CTR", "CR", "Add_To_Card",
             "Stok", "SatisAdet", "Devir_Hizi", "Resim_link",
@@ -41,22 +40,26 @@ if uploaded_file:
         kategori_secimi = st.selectbox("Kategori Seçin:", options=df["Kategori"].unique())
         trend_esik = st.slider("Trend Skor Eşiği", 0.0, 2.5, 1.0, 0.1)
 
-        # Filtrelenmiş dataframe
         df_kat = df[df["Kategori"] == kategori_secimi].copy()
         df_kat = df_kat.sort_values("Trend_Skoru", ascending=False)
 
-        # Grafik
+        # GRAFİK - Ürün kodlarını tam göster
         st.markdown("### 📈 Trend Skoru Grafiği")
         grafik = alt.Chart(df_kat).mark_bar().encode(
-            x=alt.X("UrUn_Kodu:N", sort="-y", title="Ürün Kodu"),
+            x=alt.X(
+                "UrUn_Kodu:N",
+                sort="-y",
+                title="Ürün Kodu",
+                axis=alt.Axis(labelAngle=-45, labelFontSize=11, labelOverlap=False)
+            ),
             y=alt.Y("Trend_Skoru:Q", title="Trend Skoru"),
             color=alt.condition(
                 f"datum.Trend_Skoru >= {trend_esik}",
-                alt.value("#27ae60"),  # yeşil
-                alt.value("#bdc3c7")   # gri
+                alt.value("#27ae60"),
+                alt.value("#bdc3c7")
             ),
             tooltip=["Urun_Ad", "Trend_Skoru", "Z_GTrend"]
-        ).properties(width=800, height=400)
+        ).properties(width=1000, height=400)
 
         y_line = alt.Chart(pd.DataFrame({"y": [trend_esik]})).mark_rule(
             color="red", strokeDash=[4, 4]
@@ -64,7 +67,7 @@ if uploaded_file:
 
         st.altair_chart(grafik + y_line, use_container_width=True)
 
-        # Trend ürünler
+        # Trend ürünler bölümü
         trend_urunler = df_kat[df_kat["Trend_Skoru"] >= trend_esik]
 
         def sosyal_medya_postu(row):
@@ -147,6 +150,7 @@ if uploaded_file:
                         st.markdown(sosyal_medya_postu(row))
 
         st.caption("📝 Not: Verileriniz local cihazınızdan yüklenir. Gizlilik korunur.")
+
     except Exception as e:
         st.error(f"❌ Hata oluştu: {str(e)}")
 else:
